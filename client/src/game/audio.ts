@@ -15,7 +15,7 @@ class SoundManager {
     if (this.bgmAudio) {
       this.bgmAudio.pause();
     }
-    const audio = new Audio(`/bgm/${track}.mp3`);
+    const audio = new Audio(`./bgm/${track}.mp3`);
     audio.loop = true;
     audio.volume = this.muted ? 0 : this.volume;
     this.bgmAudio = audio;
