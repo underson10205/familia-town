@@ -10,6 +10,7 @@ import { JobInfoModal } from './components/JobInfoModal';
 import { NpcDialogModal } from './components/NpcDialogModal';
 import { WorkModal } from './components/WorkModal';
 import { MarketModal } from './components/MarketModal';
+import { FamilyModal } from './components/FamilyModal';
 
 export function App() {
   const {
@@ -26,6 +27,8 @@ export function App() {
     errands,
     workResult,
     setWorkResult,
+    familyEvent,
+    setFamilyEvent,
     createCharacter,
     loginCharacter,
     sendMove,
@@ -40,12 +43,19 @@ export function App() {
     sellItem,
     postErrand,
     fulfillErrand,
+    giftNpc,
+    proposeNpc,
+    haveChild,
+    passGeneration,
+    upgradeHome,
+    payRent,
   } = useGameSocket();
 
   const [creating, setCreating] = useState(false);
   const [showJobs, setShowJobs] = useState(false);
   const [showWork, setShowWork] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
+  const [showFamily, setShowFamily] = useState(false);
   const [nearbyNpc, setNearbyNpc] = useState<NpcData | null>(null);
   const [nearDungeonGate, setNearDungeonGate] = useState(false);
   const [activeDungeonRecipe, setActiveDungeonRecipe] = useState<WorkRecipeDef | null>(null);
@@ -59,11 +69,9 @@ export function App() {
   const handleEnterDungeonGate = useCallback(() => {
     if (!self) return;
     if (self.jobId === 'adventurer') {
-      // Open dungeon selector (or enter directly)
       setWorkResult(null);
       setShowWork(true);
     } else {
-      // Even non-adventurers can peek at tier 1 dungeon after switching, or show work modal
       const advTier1 = getRecipesForJob('adventurer')[0];
       if (advTier1) {
         changeJob('adventurer');
@@ -91,6 +99,44 @@ export function App() {
           }}
         >
           ⚠️ {error}
+        </div>
+      )}
+
+      {familyEvent && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(35, 25, 18, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            zIndex: 90,
+          }}
+          onClick={() => setFamilyEvent(null)}
+        >
+          <div
+            className="storybook-card"
+            style={{
+              maxWidth: 440,
+              width: '100%',
+              padding: 24,
+              textAlign: 'center',
+              background: '#FFF9EC',
+              borderColor: '#E5AA3C',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 48, marginBottom: 6 }}>{familyEvent.emoji}</div>
+            <h2 style={{ margin: '0 0 8px', fontSize: 21, color: '#8C4A22' }}>{familyEvent.title}</h2>
+            <p style={{ margin: '0 0 18px', fontSize: 14, fontWeight: 700, lineHeight: 1.6 }}>
+              {familyEvent.message}
+            </p>
+            <button className="btn-primary" onClick={() => setFamilyEvent(null)}>
+              ✨ やったね！
+            </button>
+          </div>
         </div>
       )}
 
@@ -150,6 +196,7 @@ export function App() {
                 setShowWork(true);
               }}
               onOpenMarket={() => setShowMarket(true)}
+              onOpenFamily={() => setShowFamily(true)}
               onOpenJobs={() => setShowJobs(true)}
               onEatSnack={() => eatSnack('onigiri')}
               onInteractNearby={() => nearbyNpc && interactNpc(nearbyNpc.id)}
@@ -185,6 +232,17 @@ export function App() {
                 onClose={() => setShowMarket(false)}
               />
             )}
+            {showFamily && (
+              <FamilyModal
+                self={self}
+                npcs={Array.from(npcsRef.current.values())}
+                onHaveChild={haveChild}
+                onPassGeneration={passGeneration}
+                onUpgradeHome={upgradeHome}
+                onPayRent={payRent}
+                onClose={() => setShowFamily(false)}
+              />
+            )}
             {showJobs && (
               <JobInfoModal
                 self={self}
@@ -197,7 +255,10 @@ export function App() {
             )}
             {npcDialog && (
               <NpcDialogModal
+                self={self}
                 dialog={npcDialog}
+                onGiftNpc={giftNpc}
+                onProposeNpc={proposeNpc}
                 onClose={() => setNpcDialog(null)}
                 onOpenJobs={() => setShowJobs(true)}
               />

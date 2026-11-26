@@ -37,6 +37,25 @@ export interface InventoryItem {
   count: number;
 }
 
+export interface ChildData {
+  id: string;
+  name: string;
+  gender: Gender;
+  age: number;
+  appearance: Appearance;
+  parentNames: [string, string];
+}
+
+export interface LineageEntry {
+  generation: number;
+  name: string;
+  gender: Gender;
+  jobId: JobId;
+  retiredAge: number;
+  spouseName: string | null;
+  appearance: Appearance;
+}
+
 export interface CharacterData {
   id: string;
   name: string;
@@ -60,7 +79,10 @@ export interface CharacterData {
   homePlotIndex: number; // 0..3
   homeLevel: number;
   shopLevel: number;
+  rentDue: number;
   spouseNpcId: string | null;
+  children: ChildData[];
+  lineageHistory: LineageEntry[];
   parentNames: [string, string] | null;
   inventory: InventoryItem[];
   lastSeenAt: number;
@@ -199,7 +221,13 @@ export type ClientMessage =
   | { type: 'sell_item'; itemId: string; count: number }
   | { type: 'list_errands' }
   | { type: 'post_errand'; itemId: string; count: number; rewardGold: number; note: string }
-  | { type: 'fulfill_errand'; errandId: string };
+  | { type: 'fulfill_errand'; errandId: string }
+  | { type: 'gift_npc'; npcId: string }
+  | { type: 'propose_npc'; npcId: string }
+  | { type: 'have_child'; name: string; gender: Gender }
+  | { type: 'pass_generation'; childId: string }
+  | { type: 'upgrade_home' }
+  | { type: 'pay_rent' };
 
 // Server -> Client WebSocket messages
 export type ServerMessage =
@@ -219,6 +247,8 @@ export type ServerMessage =
     }
   | { type: 'error'; message: string }
   | { type: 'world_tick'; clock: WorldClock; npcs: Pick<NpcData, 'id' | 'x' | 'y' | 'dir' | 'moving'>[] }
+  | { type: 'npcs_updated'; npcs: NpcData[] }
+  | { type: 'family_event'; title: string; message: string; emoji: string }
   | { type: 'player_joined'; player: OnlinePlayerState; onlineCount: number }
   | { type: 'player_left'; playerId: string; onlineCount: number }
   | { type: 'player_moved'; playerId: string; x: number; y: number; dir: Direction; moving: boolean }

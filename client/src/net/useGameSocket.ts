@@ -39,6 +39,7 @@ export function useGameSocket() {
   const [npcDialog, setNpcDialog] = useState<NpcDialogState | null>(null);
   const [errands, setErrands] = useState<ErrandPost[]>([]);
   const [workResult, setWorkResult] = useState<WorkResultPayload | null>(null);
+  const [familyEvent, setFamilyEvent] = useState<{ emoji: string; title: string; message: string } | null>(null);
 
   // Use refs for high-frequency 60fps canvas rendering without re-rendering React every frame
   const playersRef = useRef<Map<string, OnlinePlayerState>>(new Map());
@@ -85,6 +86,18 @@ export function useGameSocket() {
         }
         break;
 
+      case 'npcs_updated': {
+        const nMap = new Map<string, NpcData>();
+        for (const n of msg.npcs) nMap.set(n.id, n);
+        npcsRef.current = nMap;
+        break;
+      }
+
+      case 'family_event':
+        setFamilyEvent({ emoji: msg.emoji, title: msg.title, message: msg.message });
+        soundManager.playChime();
+        break;
+
       case 'player_joined':
         playersRef.current.set(msg.player.id, msg.player);
         setClock((prev) => (prev ? { ...prev, onlineCount: msg.onlineCount } : prev));
@@ -115,6 +128,9 @@ export function useGameSocket() {
         setSelf(msg.self);
         const p = playersRef.current.get(msg.self.id);
         if (p) {
+          p.name = msg.self.name;
+          p.gender = msg.self.gender;
+          p.generation = msg.self.generation;
           p.jobId = msg.self.jobId;
           p.age = msg.self.age;
           p.appearance = msg.self.appearance;
@@ -350,6 +366,15 @@ export function useGameSocket() {
     },
     [send]
   );
+  const giftNpc = useCallback((npcId: string) => send({ type: 'gift_npc', npcId }), [send]);
+  const proposeNpc = useCallback((npcId: string) => send({ type: 'propose_npc', npcId }), [send]);
+  const haveChild = useCallback(
+    (name: string, gender: Gender) => send({ type: 'have_child', name, gender }),
+    [send]
+  );
+  const passGeneration = useCallback((childId: string) => send({ type: 'pass_generation', childId }), [send]);
+  const upgradeHome = useCallback(() => send({ type: 'upgrade_home' }), [send]);
+  const payRent = useCallback(() => send({ type: 'pay_rent' }), [send]);
 
   return {
     connected,
@@ -365,6 +390,8 @@ export function useGameSocket() {
     errands,
     workResult,
     setWorkResult,
+    familyEvent,
+    setFamilyEvent,
     createCharacter,
     loginCharacter,
     sendMove,
@@ -379,5 +406,11 @@ export function useGameSocket() {
     sellItem,
     postErrand,
     fulfillErrand,
+    giftNpc,
+    proposeNpc,
+    haveChild,
+    passGeneration,
+    upgradeHome,
+    payRent,
   };
 }

@@ -1,16 +1,29 @@
-import { JOBS } from '@familia-town/shared';
+import { type CharacterData, JOBS } from '@familia-town/shared';
 import type { NpcDialogState } from '../net/useGameSocket';
 import { ChibiPreview } from './ChibiPreview';
+import { soundManager } from '../game/audio';
 
 interface NpcDialogModalProps {
+  self: CharacterData;
   dialog: NpcDialogState;
+  onGiftNpc: (npcId: string) => void;
+  onProposeNpc: (npcId: string) => void;
   onClose: () => void;
   onOpenJobs: () => void;
 }
 
-export function NpcDialogModal({ dialog, onClose, onOpenJobs }: NpcDialogModalProps) {
+export function NpcDialogModal({
+  self,
+  dialog,
+  onGiftNpc,
+  onProposeNpc,
+  onClose,
+  onOpenJobs,
+}: NpcDialogModalProps) {
   const { npc, line, affinity, canRomance } = dialog;
   const job = npc.jobId ? JOBS[npc.jobId] : null;
+  const isSpouse = self.spouseNpcId === npc.id;
+  const canPropose = canRomance && !self.spouseNpcId && affinity >= 60;
 
   return (
     <div
@@ -30,7 +43,7 @@ export function NpcDialogModal({ dialog, onClose, onOpenJobs }: NpcDialogModalPr
         className="storybook-card"
         style={{
           width: '100%',
-          maxWidth: 620,
+          maxWidth: 640,
           padding: 18,
           display: 'flex',
           gap: 16,
@@ -57,13 +70,22 @@ export function NpcDialogModal({ dialog, onClose, onOpenJobs }: NpcDialogModalPr
               {job ? `${job.emoji} ` : ''}
               {npc.roleTitle}（{npc.age}さい）
             </span>
-            {canRomance && (
+            {isSpouse ? (
               <span
                 className="pill-badge"
                 style={{ fontSize: 11, background: '#FDE8F0', borderColor: '#EC6B99', color: '#C43E6E' }}
               >
-                💖 なかよし度 {affinity}/100
+                💍 わたしのパートナー
               </span>
+            ) : (
+              canRomance && (
+                <span
+                  className="pill-badge"
+                  style={{ fontSize: 11, background: '#FDE8F0', borderColor: '#EC6B99', color: '#C43E6E' }}
+                >
+                  💖 なかよし度 {affinity}/100
+                </span>
+              )
             )}
           </div>
 
@@ -75,16 +97,47 @@ export function NpcDialogModal({ dialog, onClose, onOpenJobs }: NpcDialogModalPr
             {npc.id === 'npc_mei' && (
               <button
                 className="btn-green"
-                style={{ fontSize: 13, padding: '8px 16px' }}
+                style={{ fontSize: 12, padding: '8px 14px' }}
                 onClick={() => {
                   onClose();
                   onOpenJobs();
                 }}
               >
-                💼 転職＆スキルを見る
+                🌳 転職＆スキル
               </button>
             )}
-            <button className="btn-primary" style={{ fontSize: 13, padding: '8px 18px' }} onClick={onClose}>
+            {canRomance && !isSpouse && (
+              <button
+                className="btn-secondary"
+                disabled={self.money < 50}
+                style={{ fontSize: 12, padding: '8px 14px' }}
+                onClick={() => {
+                  soundManager.playPop(720);
+                  onGiftNpc(npc.id);
+                }}
+              >
+                💐 お花を贈る (50G)
+              </button>
+            )}
+            {canPropose && (
+              <button
+                className="btn-primary"
+                style={{
+                  fontSize: 13,
+                  padding: '8px 16px',
+                  background: 'linear-gradient(180deg, #ff85b3 0%, #e05288 100%)',
+                  boxShadow: '0 3px 0 #a83260',
+                }}
+                onClick={() => {
+                  soundManager.playChime();
+                  onProposeNpc(npc.id);
+                  onClose();
+                }}
+              >
+                💍 プロポーズする！
+              </button>
+            )}
+            <button className="btn-secondary" style={{ fontSize: 13, padding: '8px 16px' }} onClick={onClose}>
               またね！
             </button>
           </div>

@@ -26,6 +26,7 @@ interface HUDProps {
   onSendStamp: (stamp: StampId) => void;
   onOpenWork: () => void;
   onOpenMarket: () => void;
+  onOpenFamily: () => void;
   onOpenJobs: () => void;
   onEatSnack: () => void;
   onInteractNearby: () => void;
@@ -43,6 +44,7 @@ export function HUD({
   onSendStamp,
   onOpenWork,
   onOpenMarket,
+  onOpenFamily,
   onOpenJobs,
   onEatSnack,
   onInteractNearby,
@@ -149,6 +151,9 @@ export function HUD({
           </button>
           <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onOpenMarket}>
             🏪 お店・掲示板
+          </button>
+          <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onOpenFamily}>
+            👨‍👩‍👧‍👦 家族・家
           </button>
           {onigiriCount > 0 && (
             <button

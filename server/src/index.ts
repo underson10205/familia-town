@@ -7,22 +7,28 @@ import {
   type CharacterData,
   type CharacterSummary,
   type ChatMessage,
+  type ChildData,
   type ClientMessage,
   type ErrandPost,
+  type LineageEntry,
+  type NpcData,
   type OnlinePlayerState,
   type ServerMessage,
   type WorkResultPayload,
   ALL_SKILLS,
+  BUILDINGS,
   ITEMS,
   JOBS,
   MAX_PLAYERS,
   STARTING_AGE,
   STARTING_MONEY,
+  TILE_SIZE,
   TOWN_SPAWN,
   canUnlockSkill,
   clampAndResolvePosition,
   createInitialJobProgress,
   getRecipeById,
+  inheritAppearance,
   xpNeededForLevel,
 } from '@familia-town/shared';
 import { GameDatabase } from './db.js';
@@ -133,12 +139,21 @@ function loginCharacter(conn: ClientConn, characterId: string): void {
     return;
   }
 
-  // Backward-compatible migration for characters created before SP system
+  // Backward-compatible migration for characters created before SP & family systems
   if (typeof charData.skillPoints !== 'number') {
     charData.skillPoints = 2;
   }
   if (!charData.skillRanks) {
     charData.skillRanks = {};
+  }
+  if (!Array.isArray(charData.children)) {
+    charData.children = [];
+  }
+  if (!Array.isArray(charData.lineageHistory)) {
+    charData.lineageHistory = [];
+  }
+  if (typeof charData.rentDue !== 'number') {
+    charData.rentDue = 0;
   }
 
   const state = toOnlineState(charData);
@@ -213,7 +228,10 @@ function handleClientMessage(conn: ClientConn, msg: ClientMessage): void {
         homePlotIndex: plotIndex,
         homeLevel: 1,
         shopLevel: msg.jobId === 'adventurer' ? 0 : 1,
+        rentDue: 0,
         spouseNpcId: null,
+        children: [],
+        lineageHistory: [],
         parentNames: null,
         inventory: [{ itemId: 'onigiri', name: 'ほかほかおにぎり', emoji: '🍙', count: 3 }],
         lastSeenAt: Date.now(),
@@ -574,6 +592,243 @@ function handleClientMessage(conn: ClientConn, msg: ClientMessage): void {
       broadcast({ type: 'errands_updated', errands: db.listErrands() });
       break;
     }
+
+    case 'gift_npc': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const npc = npcs.find((n) => n.id === msg.npcId);
+      if (!npc) return;
+      const giftCost = 50;
+      if (session.data.money < giftCost) {
+        conn.send({ type: 'error', message: 'お花代（50G）がたりないよ！' });
+        return;
+      }
+      session.data.money -= giftCost;
+      if (!npc.affinityByCharacter) npc.affinityByCharacter = {};
+      const charmRank = session.data.skillRanks?.['bty_charm_aura'] ?? 0;
+      const gain = 20 + charmRank * 5;
+      const nextAffinity = Math.min(100, (npc.affinityByCharacter[session.characterId] ?? 0) + gain);
+      npc.affinityByCharacter[session.characterId] = nextAffinity;
+      db.saveNpc(npc);
+      db.saveCharacter(session.data);
+
+      const canRomance = npc.canMarry && npc.gender !== session.data.gender;
+      conn.send({ type: 'self_updated', self: session.data });
+      conn.send({
+        type: 'npc_dialog',
+        npc,
+        line: `わあ、きれいなお花ありがとう！！${session.data.name}のこと、もっと好きになっちゃった♪`,
+        affinity: nextAffinity,
+        canRomance,
+      });
+      break;
+    }
+
+    case 'propose_npc': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      if (session.data.spouseNpcId) {
+        conn.send({ type: 'error', message: 'もうすてきなパートナーがいるよ！' });
+        return;
+      }
+      const npc = npcs.find((n) => n.id === msg.npcId);
+      if (!npc || !npc.canMarry) {
+        conn.send({ type: 'error', message: 'その相手にはプロポーズできません' });
+        return;
+      }
+      if (npc.gender === session.data.gender) {
+        conn.send({ type: 'error', message: '異性のNPCと結婚できるよ！' });
+        return;
+      }
+      const affinity = npc.affinityByCharacter?.[session.characterId] ?? 0;
+      if (affinity < 60) {
+        conn.send({ type: 'error', message: `なかよし度が 60 以上必要だよ！（いま ${affinity}）` });
+        return;
+      }
+
+      session.data.spouseNpcId = npc.id;
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      conn.send({
+        type: 'family_event',
+        emoji: '💍',
+        title: 'ご結婚おめでとうございます！',
+        message: `${session.data.name} と ${npc.name} が結婚しました！「家族・マイホーム」から子供をむかえられるよ♪`,
+      });
+      break;
+    }
+
+    case 'have_child': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      if (!session.data.spouseNpcId) {
+        conn.send({ type: 'error', message: '先に町のNPCと結婚してね！' });
+        return;
+      }
+      if (session.data.children.length >= 3) {
+        conn.send({ type: 'error', message: '子供は3人までむかえられるよ！' });
+        return;
+      }
+      const childName = msg.name.trim().slice(0, 12);
+      if (!childName) {
+        conn.send({ type: 'error', message: '子供のおなまえを入力してね！' });
+        return;
+      }
+      const spouse = npcs.find((n) => n.id === session.data.spouseNpcId);
+      if (!spouse) return;
+
+      const childGender = msg.gender === 'female' ? 'female' : 'male';
+      const childAppearance = inheritAppearance(session.data.appearance, spouse.appearance, childGender);
+      const child: ChildData = {
+        id: `child_${crypto.randomUUID().slice(0, 8)}`,
+        name: childName,
+        gender: childGender,
+        age: 1,
+        appearance: childAppearance,
+        parentNames: [session.data.name, spouse.name],
+      };
+
+      session.data.children.push(child);
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      conn.send({
+        type: 'family_event',
+        emoji: '👶',
+        title: `あたらしい家族「${child.name}」が誕生！`,
+        message: `${session.data.name} と ${spouse.name} の容姿の特徴を受け継いだかわいい子供だよ！`,
+      });
+      break;
+    }
+
+    case 'pass_generation': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const child = session.data.children.find((c) => c.id === msg.childId);
+      if (!child) {
+        conn.send({ type: 'error', message: '引き継ぐ子供が見つかりません' });
+        return;
+      }
+
+      const oldName = session.data.name;
+      const oldGen = session.data.generation;
+      const spouse = session.data.spouseNpcId ? npcs.find((n) => n.id === session.data.spouseNpcId) : null;
+
+      // 1. Record retired parent into Lineage Album
+      const entry: LineageEntry = {
+        generation: oldGen,
+        name: oldName,
+        gender: session.data.gender,
+        jobId: session.data.jobId,
+        retiredAge: session.data.age,
+        spouseName: spouse?.name ?? null,
+        appearance: session.data.appearance,
+      };
+      session.data.lineageHistory.push(entry);
+
+      // 2. Spawn retired parent as a friendly Elder NPC strolling near their house!
+      const house = BUILDINGS.find((b) => b.plotIndex === session.data.homePlotIndex);
+      const elderX = house ? house.doorTileX * TILE_SIZE : TOWN_SPAWN.x;
+      const elderY = house ? (house.doorTileY + 0.6) * TILE_SIZE : TOWN_SPAWN.y;
+      const elderNpc: NpcData = {
+        id: `npc_elder_${crypto.randomUUID().slice(0, 6)}`,
+        name: `${oldName}`,
+        gender: session.data.gender,
+        roleTitle: `${oldGen}代目・ご隠居`,
+        jobId: session.data.jobId,
+        age: Math.max(60, session.data.age),
+        appearance: session.data.appearance,
+        x: elderX,
+        y: elderY,
+        homeX: elderX,
+        homeY: elderY,
+        dir: 'down',
+        moving: false,
+        dialogue: [
+          `おお、${child.name}！元気にやっとるか？引き継いだスキルを役立ててくれよな！`,
+          `わしが${oldGen}代目として過ごしたこの町を、これからも大切にしておくれ。`,
+          `たまには顔を見せにきてくれるとうれしいぞ♪`,
+        ],
+        canMarry: false,
+        isRetiredPlayer: true,
+        affinityByCharacter: {},
+      };
+      npcs.push(elderNpc);
+      db.saveNpc(elderNpc);
+
+      // 3. Promote child to active playable character (inheriting ALL skills, money, home, items + 2 bonus SP!)
+      session.data.name = child.name;
+      session.data.gender = child.gender;
+      session.data.age = STARTING_AGE;
+      session.data.generation = oldGen + 1;
+      session.data.appearance = child.appearance;
+      session.data.parentNames = child.parentNames;
+      session.data.spouseNpcId = null;
+      session.data.children = [];
+      session.data.skillPoints = (session.data.skillPoints ?? 0) + 2;
+      session.data.hunger = session.data.maxHunger;
+      session.data.stamina = session.data.maxStamina;
+
+      // Update live online state
+      session.state.name = session.data.name;
+      session.state.gender = session.data.gender;
+      session.state.age = session.data.age;
+      session.state.generation = session.data.generation;
+      session.state.appearance = session.data.appearance;
+
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      broadcast({ type: 'player_updated', player: session.state }, conn.id);
+      broadcast({ type: 'npcs_updated', npcs });
+      conn.send({
+        type: 'family_event',
+        emoji: '🌸',
+        title: `${session.data.generation}代目「${child.name}」の物語がはじまる！`,
+        message: `${oldName} のスキル・お金・おうちをすべて引き継ぎ、ボーナス +2 SP を獲得！${oldName} はご隠居として町にいるよ！`,
+      });
+      break;
+    }
+
+    case 'upgrade_home': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const costs: Record<number, number> = { 1: 600, 2: 1500, 3: 3000 };
+      const cost = costs[session.data.homeLevel];
+      if (!cost) {
+        conn.send({ type: 'error', message: 'すでに最高ランクの豪華なお城ハウスだよ！' });
+        return;
+      }
+      if (session.data.money < cost) {
+        conn.send({ type: 'error', message: `リフォーム費用（${cost}G）がたりないよ！` });
+        return;
+      }
+      session.data.money -= cost;
+      session.data.homeLevel += 1;
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      conn.send({
+        type: 'family_event',
+        emoji: '🏡',
+        title: `マイホームが Lv.${session.data.homeLevel} に増築されました！`,
+        message: '町にあるあなたのおうちもグレードアップしたよ！',
+      });
+      break;
+    }
+
+    case 'pay_rent': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      if (session.data.rentDue <= 0) return;
+      const pay = Math.min(session.data.money, session.data.rentDue);
+      if (pay <= 0) {
+        conn.send({ type: 'error', message: 'お金を稼いでから少しずつ返せば大丈夫だよ！' });
+        return;
+      }
+      session.data.money -= pay;
+      session.data.rentDue -= pay;
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      break;
+    }
   }
 }
 
@@ -766,7 +1021,7 @@ setInterval(() => {
   }
 
   if (sessions.size > 0) {
-    const { clock, newYear } = advanceWorldClock(worldClock, dtSeconds, sessions.size);
+    const { clock, newDay, newYear } = advanceWorldClock(worldClock, dtSeconds, sessions.size);
     worldClock = clock;
     npcSim.step(npcs, dtSeconds, now);
 
@@ -775,14 +1030,34 @@ setInterval(() => {
       s.data.hunger = Math.max(0, s.data.hunger - dtSeconds * 0.08);
     }
 
-    // Age everyone by +1 when a new year arrives in the shared world
+    // Weekly rent on day 1 of each new season (gentle: auto-pays if affordable, else adds to rentDue)
+    if (newDay && clock.day === 1) {
+      for (const s of sessions.values()) {
+        const rentCutRank = s.data.skillRanks?.['rel_rent_cut'] ?? 0;
+        const baseRent = s.data.homeLevel * 40;
+        const rent = Math.max(15, Math.round(baseRent * (1 - rentCutRank * 0.12)));
+        if (s.data.money >= rent) {
+          s.data.money -= rent;
+        } else {
+          s.data.rentDue = (s.data.rentDue ?? 0) + rent;
+        }
+        db.saveCharacter(s.data);
+        s.conn.send({ type: 'self_updated', self: s.data });
+      }
+    }
+
+    // Age everyone (and children) by +1 when a new year arrives in the shared world
     if (newYear) {
       for (const c of db.listCharacters()) {
         c.age += 1;
+        if (Array.isArray(c.children)) {
+          for (const ch of c.children) ch.age += 1;
+        }
         db.saveCharacter(c);
         const online = onlineByCharId.get(c.id);
         if (online) {
           online.data.age = c.age;
+          online.data.children = c.children;
           online.state.age = c.age;
           online.conn.send({ type: 'self_updated', self: online.data });
           broadcast({ type: 'player_updated', player: online.state }, online.conn.id);
