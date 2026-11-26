@@ -1,2 +1,20 @@
-# familia-town
-4-player persistent shared-world slow-life MMORPG with generational inheritance and 6 jobs (Familia Town)
+# 🏡 ファミリアタウン (Familia Town)
+
+家族・子供たちと一緒に最大4人で暮らせる、永続共有ワールド型の **2DスローライフMMORPG** です。
+
+## 主な特徴
+- **最大4人リアルタイムマルチプレイ**: PC・タブレット・スマホのブラウザからURLを開くだけで同じ町にいつでもログイン可能
+- **安心の共有時計**: 誰か1人でもログイン中だけ時間が進み、全員ログアウト中は停止します
+- **6つの職業と経済循環**: 冒険家・鍛冶屋・薬剤師・農家・不動産屋・美容師（選ばれていない職業はNPCが代行）
+- **世代交代と遺伝システム**: 異性のNPCと仲良くなって結婚・子育てし、両親の見た目とスキルを子供へ引き継げます
+
+## ローカル起動方法
+
+```bash
+npm install
+npm run build
+npm run dev
+```
+
+- フロントエンド: `http://localhost:5173`
+- ゲームサーバー (WebSocket + API): `http://localhost:3001`
