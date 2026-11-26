@@ -8,9 +8,12 @@ import {
   type CharacterSummary,
   type ChatMessage,
   type ClientMessage,
+  type ErrandPost,
   type OnlinePlayerState,
   type ServerMessage,
+  type WorkResultPayload,
   ALL_SKILLS,
+  ITEMS,
   JOBS,
   MAX_PLAYERS,
   STARTING_AGE,
@@ -19,6 +22,8 @@ import {
   canUnlockSkill,
   clampAndResolvePosition,
   createInitialJobProgress,
+  getRecipeById,
+  xpNeededForLevel,
 } from '@familia-town/shared';
 import { GameDatabase } from './db.js';
 import { NpcSimulator, advanceWorldClock, toPublicClock } from './worldSim.js';
@@ -149,6 +154,7 @@ function loginCharacter(conn: ClientConn, characterId: string): void {
     npcs,
     clock: toPublicClock(worldClock, sessions.size),
     chatHistory: db.getRecentChat(30),
+    errands: db.listErrands(),
   });
 
   broadcast(
@@ -352,19 +358,244 @@ function handleClientMessage(conn: ClientConn, msg: ClientMessage): void {
     case 'eat_snack': {
       const session = sessions.get(conn.id);
       if (!session) return;
-      const snack = session.data.inventory.find((i) => i.itemId === 'onigiri' && i.count > 0);
-      if (!snack) {
-        conn.send({ type: 'error', message: 'おにぎりを持っていないよ！' });
+      const targetId = msg.itemId ?? 'onigiri';
+      const itemDef = ITEMS[targetId];
+      if (!itemDef || (!itemDef.hungerRestore && !itemDef.staminaRestore)) {
+        conn.send({ type: 'error', message: 'それは食べられないよ！' });
         return;
       }
-      snack.count -= 1;
-      session.data.hunger = Math.min(session.data.maxHunger, session.data.hunger + 35);
-      session.data.stamina = Math.min(session.data.maxStamina, session.data.stamina + 25);
+      if (!removeInventoryItem(session.data, targetId, 1)) {
+        conn.send({ type: 'error', message: `${itemDef.name}を持っていないよ！` });
+        return;
+      }
+      session.data.hunger = Math.min(session.data.maxHunger, session.data.hunger + (itemDef.hungerRestore ?? 0));
+      session.data.stamina = Math.min(session.data.maxStamina, session.data.stamina + (itemDef.staminaRestore ?? 0));
       db.saveCharacter(session.data);
       conn.send({ type: 'self_updated', self: session.data });
       break;
     }
+
+    case 'complete_work': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const recipe = getRecipeById(msg.recipeId);
+      if (!recipe) {
+        conn.send({ type: 'error', message: 'お仕事が見つかりませんでした' });
+        return;
+      }
+      if (recipe.jobId !== session.data.jobId) {
+        conn.send({ type: 'error', message: 'いまの職業のお仕事じゃないよ！' });
+        return;
+      }
+      if (recipe.requiredSkillId && (session.data.skillRanks[recipe.requiredSkillId] ?? 0) < 1) {
+        conn.send({ type: 'error', message: '先にスキルツリーでレシピを解放してね！' });
+        return;
+      }
+
+      const clampedScore = Math.max(0, Math.min(100, Math.round(msg.score)));
+      const rank: 1 | 2 | 3 = clampedScore >= 85 ? 3 : clampedScore >= 55 ? 2 : 1;
+      const rankMult = rank === 3 ? 1.5 : rank === 2 ? 1.15 : 0.85;
+
+      // Apply skill tree bonuses
+      const ranks = session.data.skillRanks ?? {};
+      const rootSkillId = `${recipe.jobId === 'adventurer' ? 'adv' : recipe.jobId === 'blacksmith' ? 'blk' : recipe.jobId === 'apothecary' ? 'alc' : recipe.jobId === 'farmer' ? 'frm' : recipe.jobId === 'realtor' ? 'rel' : 'bty'}_root`;
+      const coreBonus = 1 + (ranks[rootSkillId] ?? 0) * 0.15;
+      const extraGoldBonus =
+        1 +
+        (ranks['adv_lucky_bag'] ?? 0) * 0.15 +
+        (ranks['rel_rent_cut'] ?? 0) * 0.12 +
+        (ranks['bty_charm_aura'] ?? 0) * 0.12;
+
+      const goldEarned = Math.round(recipe.baseGold * rankMult * coreBonus * extraGoldBonus);
+      const xpEarned = Math.round(recipe.baseXp * rankMult);
+
+      let itemCount = recipe.rewardItemCount;
+      if (rank === 3 && (ranks['alc_double_brew'] ?? 0) > 0 && recipe.jobId === 'apothecary') {
+        itemCount *= 2;
+      } else if (rank === 3 && Math.random() < 0.35) {
+        itemCount += 1;
+      }
+
+      session.data.money += goldEarned;
+      session.data.hunger = Math.max(0, session.data.hunger - recipe.hungerCost);
+
+      // XP & Level-up -> earns Skill Points (SP)!
+      const prog = session.data.jobProgress[recipe.jobId];
+      prog.xp += xpEarned;
+      let leveledUp = false;
+      let spEarned = rank === 3 && recipe.tier >= 2 ? 1 : 0; // Bonus SP on high-tier perfect clear!
+
+      while (prog.xp >= xpNeededForLevel(prog.level)) {
+        prog.xp -= xpNeededForLevel(prog.level);
+        prog.level += 1;
+        leveledUp = true;
+        spEarned += 1;
+      }
+      session.data.skillPoints = (session.data.skillPoints ?? 0) + spEarned;
+
+      const rewardDef = ITEMS[recipe.rewardItemId];
+      if (rewardDef) {
+        addInventoryItem(session.data, rewardDef.id, itemCount);
+      }
+
+      db.saveCharacter(session.data);
+
+      const result: WorkResultPayload = {
+        recipeId: recipe.id,
+        recipeName: recipe.name,
+        rank,
+        goldEarned,
+        xpEarned,
+        leveledUp,
+        newLevel: prog.level,
+        spEarned,
+        itemName: rewardDef?.name ?? recipe.rewardItemId,
+        itemEmoji: rewardDef?.emoji ?? '🎁',
+        itemCount,
+      };
+      conn.send({ type: 'work_result', result, self: session.data });
+      break;
+    }
+
+    case 'buy_item': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const itemDef = ITEMS[msg.itemId];
+      const qty = Math.max(1, Math.min(20, Math.floor(msg.count)));
+      if (!itemDef || !itemDef.buyPrice) {
+        conn.send({ type: 'error', message: 'そのアイテムは買えないよ！' });
+        return;
+      }
+      const total = itemDef.buyPrice * qty;
+      if (session.data.money < total) {
+        conn.send({ type: 'error', message: `お金がたりないよ！（${total}G 必要）` });
+        return;
+      }
+      session.data.money -= total;
+      addInventoryItem(session.data, itemDef.id, qty);
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      break;
+    }
+
+    case 'sell_item': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const itemDef = ITEMS[msg.itemId];
+      const qty = Math.max(1, Math.min(99, Math.floor(msg.count)));
+      if (!itemDef) return;
+      if (!removeInventoryItem(session.data, itemDef.id, qty)) {
+        conn.send({ type: 'error', message: 'アイテムの数がたりないよ！' });
+        return;
+      }
+      session.data.money += itemDef.sellPrice * qty;
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
+      break;
+    }
+
+    case 'list_errands': {
+      conn.send({ type: 'errands_updated', errands: db.listErrands() });
+      break;
+    }
+
+    case 'post_errand': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const itemDef = ITEMS[msg.itemId];
+      const count = Math.max(1, Math.min(10, Math.floor(msg.count)));
+      const rewardGold = Math.max(30, Math.min(2000, Math.floor(msg.rewardGold)));
+      if (!itemDef) return;
+      if (session.data.money < rewardGold) {
+        conn.send({ type: 'error', message: '報酬のお金がたりないよ！' });
+        return;
+      }
+      session.data.money -= rewardGold;
+      db.saveCharacter(session.data);
+
+      const errand: ErrandPost = {
+        id: `err_${crypto.randomUUID().slice(0, 8)}`,
+        posterId: session.characterId,
+        posterName: session.data.name,
+        isNpc: false,
+        itemId: itemDef.id,
+        count,
+        rewardGold,
+        note: msg.note.trim().slice(0, 40) || `${itemDef.name}を集めてほしいな！`,
+        createdAt: Date.now(),
+      };
+      db.saveErrand(errand);
+      conn.send({ type: 'self_updated', self: session.data });
+      broadcast({ type: 'errands_updated', errands: db.listErrands() });
+      break;
+    }
+
+    case 'fulfill_errand': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const errands = db.listErrands();
+      const errand = errands.find((e) => e.id === msg.errandId);
+      if (!errand) {
+        conn.send({ type: 'error', message: 'そのおつかいはもう終わっているよ！' });
+        return;
+      }
+      if (errand.posterId === session.characterId) {
+        conn.send({ type: 'error', message: '自分のおつかいには納品できないよ！' });
+        return;
+      }
+      if (!removeInventoryItem(session.data, errand.itemId, errand.count)) {
+        const itemName = ITEMS[errand.itemId]?.name ?? errand.itemId;
+        conn.send({ type: 'error', message: `${itemName} が ${errand.count}個 必要だよ！` });
+        return;
+      }
+
+      session.data.money += errand.rewardGold;
+      session.data.skillPoints = (session.data.skillPoints ?? 0) + 1; // Helping others earns +1 SP!
+      db.saveCharacter(session.data);
+
+      // Deliver items to poster if poster is a player
+      if (!errand.isNpc) {
+        const posterOnline = onlineByCharId.get(errand.posterId);
+        if (posterOnline) {
+          addInventoryItem(posterOnline.data, errand.itemId, errand.count);
+          db.saveCharacter(posterOnline.data);
+          posterOnline.conn.send({ type: 'self_updated', self: posterOnline.data });
+        } else {
+          const posterOffline = db.getCharacter(errand.posterId);
+          if (posterOffline) {
+            addInventoryItem(posterOffline, errand.itemId, errand.count);
+            db.saveCharacter(posterOffline);
+          }
+        }
+        db.deleteErrand(errand.id);
+      }
+
+      conn.send({ type: 'self_updated', self: session.data });
+      broadcast({ type: 'errands_updated', errands: db.listErrands() });
+      break;
+    }
   }
+}
+
+function addInventoryItem(char: CharacterData, itemId: string, count: number): void {
+  const def = ITEMS[itemId];
+  if (!def || count <= 0) return;
+  const existing = char.inventory.find((i) => i.itemId === itemId);
+  if (existing) {
+    existing.count += count;
+  } else {
+    char.inventory.push({ itemId: def.id, name: def.name, emoji: def.emoji, count });
+  }
+}
+
+function removeInventoryItem(char: CharacterData, itemId: string, count: number): boolean {
+  const existing = char.inventory.find((i) => i.itemId === itemId);
+  if (!existing || existing.count < count) return false;
+  existing.count -= count;
+  if (existing.count <= 0) {
+    char.inventory = char.inventory.filter((i) => i.itemId !== itemId);
+  }
+  return true;
 }
 
 function getOrCreateHttpClient(clientId: string): HttpClientBucket {

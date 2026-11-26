@@ -23,6 +23,8 @@ interface HUDProps {
   nearbyNpcName: string | null;
   onSendChat: (text: string) => void;
   onSendStamp: (stamp: StampId) => void;
+  onOpenWork: () => void;
+  onOpenMarket: () => void;
   onOpenJobs: () => void;
   onEatSnack: () => void;
   onInteractNearby: () => void;
@@ -36,6 +38,8 @@ export function HUD({
   nearbyNpcName,
   onSendChat,
   onSendStamp,
+  onOpenWork,
+  onOpenMarket,
   onOpenJobs,
   onEatSnack,
   onInteractNearby,
@@ -50,6 +54,7 @@ export function HUD({
   const mins = String(Math.floor(clock.minuteOfDay % 60)).padStart(2, '0');
   const dayIcon = clock.minuteOfDay >= 360 && clock.minuteOfDay < 1080 ? '☀️' : '🌙';
   const onigiriCount = self.inventory.find((i) => i.itemId === 'onigiri')?.count ?? 0;
+  const sp = self.skillPoints ?? 0;
 
   const handleToggleMute = () => {
     setMuted(soundManager.toggleMute());
@@ -76,13 +81,14 @@ export function HUD({
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
-          minWidth: 220,
+          minWidth: 230,
+          maxWidth: 'calc(100vw - 24px)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 15 }}>
             {self.name}{' '}
-            <span style={{ fontSize: 12, opacity: 0.78 }}>
+            <span style={{ fontSize: 11, opacity: 0.78 }}>
               ({self.age}さい・{self.generation}代目)
             </span>
           </div>
@@ -93,11 +99,11 @@ export function HUD({
               border: `1.5px solid ${job.color}`,
               borderRadius: 999,
               padding: '2px 8px',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 800,
             }}
           >
-            {job.emoji} {job.name}
+            {job.emoji} {job.name} Lv.{self.jobProgress[self.jobId].level}
           </span>
         </div>
 
@@ -127,17 +133,29 @@ export function HUD({
         </div>
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onOpenJobs}>
-            💼 職業・スキル
-          </button>
           <button
-            className="btn-secondary"
-            style={{ padding: '4px 10px', fontSize: 12 }}
-            onClick={onEatSnack}
-            disabled={onigiriCount <= 0}
+            className="btn-primary"
+            style={{ padding: '5px 12px', fontSize: 12, boxShadow: '0 2px 0 #b84a39' }}
+            onClick={onOpenWork}
           >
-            🍙 たべる ({onigiriCount})
+            {job.emoji} お仕事する
           </button>
+          <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onOpenJobs}>
+            🌳 スキル{sp > 0 ? ` (${sp}SP)` : ''}
+          </button>
+          <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: 12 }} onClick={onOpenMarket}>
+            🏪 お店・掲示板
+          </button>
+          {onigiriCount > 0 && (
+            <button
+              className="btn-secondary"
+              style={{ padding: '4px 8px', fontSize: 12 }}
+              onClick={onEatSnack}
+              title="おにぎりをたべる"
+            >
+              🍙×{onigiriCount}
+            </button>
+          )}
         </div>
       </div>
 

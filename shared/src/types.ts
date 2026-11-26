@@ -150,6 +150,32 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+export interface ErrandPost {
+  id: string;
+  posterId: string;
+  posterName: string;
+  isNpc: boolean;
+  itemId: string;
+  count: number;
+  rewardGold: number;
+  note: string;
+  createdAt: number;
+}
+
+export interface WorkResultPayload {
+  recipeId: string;
+  recipeName: string;
+  rank: 1 | 2 | 3; // ★1, ★2, ★3
+  goldEarned: number;
+  xpEarned: number;
+  leveledUp: boolean;
+  newLevel: number;
+  spEarned: number;
+  itemName: string;
+  itemEmoji: string;
+  itemCount: number;
+}
+
 // Client -> Server WebSocket messages
 export type ClientMessage =
   | { type: 'list_characters' }
@@ -167,7 +193,13 @@ export type ClientMessage =
   | { type: 'change_job'; jobId: JobId }
   | { type: 'unlock_skill'; skillId: string }
   | { type: 'interact_npc'; npcId: string }
-  | { type: 'eat_snack' };
+  | { type: 'eat_snack'; itemId?: string }
+  | { type: 'complete_work'; recipeId: string; score: number }
+  | { type: 'buy_item'; itemId: string; count: number }
+  | { type: 'sell_item'; itemId: string; count: number }
+  | { type: 'list_errands' }
+  | { type: 'post_errand'; itemId: string; count: number; rewardGold: number; note: string }
+  | { type: 'fulfill_errand'; errandId: string };
 
 // Server -> Client WebSocket messages
 export type ServerMessage =
@@ -183,6 +215,7 @@ export type ServerMessage =
       npcs: NpcData[];
       clock: WorldClock;
       chatHistory: ChatMessage[];
+      errands: ErrandPost[];
     }
   | { type: 'error'; message: string }
   | { type: 'world_tick'; clock: WorldClock; npcs: Pick<NpcData, 'id' | 'x' | 'y' | 'dir' | 'moving'>[] }
@@ -191,6 +224,8 @@ export type ServerMessage =
   | { type: 'player_moved'; playerId: string; x: number; y: number; dir: Direction; moving: boolean }
   | { type: 'player_updated'; player: OnlinePlayerState }
   | { type: 'self_updated'; self: CharacterData }
+  | { type: 'work_result'; result: WorkResultPayload; self: CharacterData }
+  | { type: 'errands_updated'; errands: ErrandPost[] }
   | { type: 'chat_broadcast'; message: ChatMessage }
   | {
       type: 'npc_dialog';

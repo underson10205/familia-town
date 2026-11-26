@@ -6,12 +6,14 @@ import type {
   ChatMessage,
   ClientMessage,
   Direction,
+  ErrandPost,
   Gender,
   JobId,
   NpcData,
   OnlinePlayerState,
   ServerMessage,
   StampId,
+  WorkResultPayload,
   WorldClock,
 } from '@familia-town/shared';
 import { soundManager } from '../game/audio';
@@ -35,6 +37,8 @@ export function useGameSocket() {
   const [self, setSelf] = useState<CharacterData | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [npcDialog, setNpcDialog] = useState<NpcDialogState | null>(null);
+  const [errands, setErrands] = useState<ErrandPost[]>([]);
+  const [workResult, setWorkResult] = useState<WorkResultPayload | null>(null);
 
   // Use refs for high-frequency 60fps canvas rendering without re-rendering React every frame
   const playersRef = useRef<Map<string, OnlinePlayerState>>(new Map());
@@ -51,6 +55,7 @@ export function useGameSocket() {
         setSelf(msg.self);
         setClock(msg.clock);
         setChatHistory(msg.chatHistory);
+        setErrands(msg.errands ?? []);
         const pMap = new Map<string, OnlinePlayerState>();
         for (const p of msg.players) pMap.set(p.id, p);
         playersRef.current = pMap;
@@ -116,6 +121,16 @@ export function useGameSocket() {
         }
         break;
       }
+
+      case 'work_result':
+        setSelf(msg.self);
+        setWorkResult(msg.result);
+        soundManager.playChime();
+        break;
+
+      case 'errands_updated':
+        setErrands(msg.errands);
+        break;
 
       case 'chat_broadcast': {
         setChatHistory((prev) => [...prev.slice(-39), msg.message]);
@@ -298,10 +313,43 @@ export function useGameSocket() {
     [send]
   );
   const interactNpc = useCallback((npcId: string) => send({ type: 'interact_npc', npcId }), [send]);
-  const eatSnack = useCallback(() => {
-    soundManager.playPop(700, 0.1);
-    send({ type: 'eat_snack' });
-  }, [send]);
+  const eatSnack = useCallback(
+    (itemId?: string) => {
+      soundManager.playPop(700, 0.1);
+      send({ type: 'eat_snack', itemId });
+    },
+    [send]
+  );
+  const completeWork = useCallback(
+    (recipeId: string, score: number) => {
+      send({ type: 'complete_work', recipeId, score });
+    },
+    [send]
+  );
+  const buyItem = useCallback(
+    (itemId: string, count: number) => {
+      send({ type: 'buy_item', itemId, count });
+    },
+    [send]
+  );
+  const sellItem = useCallback(
+    (itemId: string, count: number) => {
+      send({ type: 'sell_item', itemId, count });
+    },
+    [send]
+  );
+  const postErrand = useCallback(
+    (itemId: string, count: number, rewardGold: number, note: string) => {
+      send({ type: 'post_errand', itemId, count, rewardGold, note });
+    },
+    [send]
+  );
+  const fulfillErrand = useCallback(
+    (errandId: string) => {
+      send({ type: 'fulfill_errand', errandId });
+    },
+    [send]
+  );
 
   return {
     connected,
@@ -314,6 +362,9 @@ export function useGameSocket() {
     chatHistory,
     npcDialog,
     setNpcDialog,
+    errands,
+    workResult,
+    setWorkResult,
     createCharacter,
     loginCharacter,
     sendMove,
@@ -323,5 +374,10 @@ export function useGameSocket() {
     unlockSkill,
     interactNpc,
     eatSnack,
+    completeWork,
+    buyItem,
+    sellItem,
+    postErrand,
+    fulfillErrand,
   };
 }

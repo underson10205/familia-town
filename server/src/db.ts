@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {
   type CharacterData,
   type ChatMessage,
+  type ErrandPost,
   type NpcData,
   type WorldClock,
   MAX_PLAYERS,
@@ -335,6 +336,12 @@ export class GameDatabase {
         stamp TEXT,
         created_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS errands (
+        id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
     `);
 
     const worldRow = this.db.prepare('SELECT id FROM world_state WHERE id = 1').get();
@@ -349,6 +356,48 @@ export class GameDatabase {
       const insertNpc = this.db.prepare('INSERT INTO npcs (id, data_json) VALUES (?, ?)');
       for (const npc of DEFAULT_NPCS) {
         insertNpc.run(npc.id, JSON.stringify(npc));
+      }
+    }
+
+    const errandCount = this.db.prepare('SELECT COUNT(*) as c FROM errands').get() as { c: number };
+    if (errandCount.c === 0) {
+      const starterErrands: ErrandPost[] = [
+        {
+          id: 'errand_npc_1',
+          posterId: 'npc_tetsu',
+          posterName: '鍛冶屋テツ',
+          isNpc: true,
+          itemId: 'iron_ore',
+          count: 2,
+          rewardGold: 160,
+          note: '新しい剣を作るのに鉄鉱石がほしいんだ！',
+          createdAt: Date.now() - 3000,
+        },
+        {
+          id: 'errand_npc_2',
+          posterId: 'npc_mina',
+          posterName: '薬剤師ミナ',
+          isNpc: true,
+          itemId: 'slime_gel',
+          count: 2,
+          rewardGold: 140,
+          note: 'ぷるぷるゼリーでお肌つるつる薬を作りたいの♪',
+          createdAt: Date.now() - 2000,
+        },
+        {
+          id: 'errand_npc_3',
+          posterId: 'npc_yuzu',
+          posterName: '町娘ユズ',
+          isNpc: true,
+          itemId: 'carrot',
+          count: 2,
+          rewardGold: 120,
+          note: 'あまいにんじんシチューを作りたいな〜！',
+          createdAt: Date.now() - 1000,
+        },
+      ];
+      for (const e of starterErrands) {
+        this.saveErrand(e);
       }
     }
   }
@@ -447,6 +496,26 @@ export class GameDatabase {
         stamp: r.stamp ?? undefined,
         createdAt: r.created_at,
       }));
+  }
+
+  listErrands(): ErrandPost[] {
+    const rows = this.db
+      .prepare('SELECT data_json FROM errands ORDER BY created_at DESC LIMIT 30')
+      .all() as { data_json: string }[];
+    return rows.map((r) => JSON.parse(r.data_json) as ErrandPost);
+  }
+
+  saveErrand(errand: ErrandPost): void {
+    this.db
+      .prepare(
+        `INSERT INTO errands (id, data_json, created_at) VALUES (?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json`
+      )
+      .run(errand.id, JSON.stringify(errand), errand.createdAt);
+  }
+
+  deleteErrand(errandId: string): void {
+    this.db.prepare('DELETE FROM errands WHERE id = ?').run(errandId);
   }
 
   close(): void {

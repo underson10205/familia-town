@@ -7,6 +7,8 @@ import { TownCanvas } from './components/TownCanvas';
 import { HUD } from './components/HUD';
 import { JobInfoModal } from './components/JobInfoModal';
 import { NpcDialogModal } from './components/NpcDialogModal';
+import { WorkModal } from './components/WorkModal';
+import { MarketModal } from './components/MarketModal';
 
 export function App() {
   const {
@@ -20,6 +22,9 @@ export function App() {
     chatHistory,
     npcDialog,
     setNpcDialog,
+    errands,
+    workResult,
+    setWorkResult,
     createCharacter,
     loginCharacter,
     sendMove,
@@ -29,10 +34,17 @@ export function App() {
     unlockSkill,
     interactNpc,
     eatSnack,
+    completeWork,
+    buyItem,
+    sellItem,
+    postErrand,
+    fulfillErrand,
   } = useGameSocket();
 
   const [creating, setCreating] = useState(false);
   const [showJobs, setShowJobs] = useState(false);
+  const [showWork, setShowWork] = useState(false);
+  const [showMarket, setShowMarket] = useState(false);
   const [nearbyNpc, setNearbyNpc] = useState<NpcData | null>(null);
   const joystickRef = useRef({ dx: 0, dy: 0 });
 
@@ -100,11 +112,41 @@ export function App() {
               nearbyNpcName={nearbyNpc?.name ?? null}
               onSendChat={sendChat}
               onSendStamp={sendStamp}
+              onOpenWork={() => {
+                setWorkResult(null);
+                setShowWork(true);
+              }}
+              onOpenMarket={() => setShowMarket(true)}
               onOpenJobs={() => setShowJobs(true)}
-              onEatSnack={eatSnack}
+              onEatSnack={() => eatSnack('onigiri')}
               onInteractNearby={() => nearbyNpc && interactNpc(nearbyNpc.id)}
               onJoystickMove={handleJoystickMove}
             />
+            {showWork && (
+              <WorkModal
+                self={self}
+                workResult={workResult}
+                onCompleteWork={completeWork}
+                onClearResult={() => setWorkResult(null)}
+                onOpenSkills={() => setShowJobs(true)}
+                onClose={() => {
+                  setWorkResult(null);
+                  setShowWork(false);
+                }}
+              />
+            )}
+            {showMarket && (
+              <MarketModal
+                self={self}
+                errands={errands}
+                onBuyItem={buyItem}
+                onSellItem={sellItem}
+                onEatItem={(itemId) => eatSnack(itemId)}
+                onPostErrand={postErrand}
+                onFulfillErrand={fulfillErrand}
+                onClose={() => setShowMarket(false)}
+              />
+            )}
             {showJobs && (
               <JobInfoModal
                 self={self}
