@@ -21,6 +21,7 @@ interface HUDProps {
   clock: WorldClock;
   chatHistory: ChatMessage[];
   nearbyNpcName: string | null;
+  nearDungeonGate: boolean;
   onSendChat: (text: string) => void;
   onSendStamp: (stamp: StampId) => void;
   onOpenWork: () => void;
@@ -28,6 +29,7 @@ interface HUDProps {
   onOpenJobs: () => void;
   onEatSnack: () => void;
   onInteractNearby: () => void;
+  onEnterDungeonGate: () => void;
   onJoystickMove: (dx: number, dy: number) => void;
 }
 
@@ -36,6 +38,7 @@ export function HUD({
   clock,
   chatHistory,
   nearbyNpcName,
+  nearDungeonGate,
   onSendChat,
   onSendStamp,
   onOpenWork,
@@ -43,6 +46,7 @@ export function HUD({
   onOpenJobs,
   onEatSnack,
   onInteractNearby,
+  onEnterDungeonGate,
   onJoystickMove,
 }: HUDProps) {
   const [muted, setMuted] = useState(soundManager.isMuted());
@@ -195,11 +199,11 @@ export function HUD({
       {/* Bottom Left: Touch Virtual Pad (usable on tablets/phones & mouse drag) */}
       <TouchPad onMove={onJoystickMove} />
 
-      {/* Center-Bottom: Nearby Interact Prompt */}
-      {nearbyNpcName && (
+      {/* Center-Bottom: Nearby Interact / Dungeon Gate Prompt */}
+      {nearDungeonGate ? (
         <button
-          className="btn-green"
-          onClick={onInteractNearby}
+          className="btn-primary"
+          onClick={onEnterDungeonGate}
           style={{
             position: 'absolute',
             bottom: 24,
@@ -210,8 +214,26 @@ export function HUD({
             padding: '12px 24px',
           }}
         >
-          💬 {nearbyNpcName} と話す (Space)
+          🌲 ダンジョンに入る (Space)
         </button>
+      ) : (
+        nearbyNpcName && (
+          <button
+            className="btn-green"
+            onClick={onInteractNearby}
+            style={{
+              position: 'absolute',
+              bottom: 24,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              pointerEvents: 'auto',
+              fontSize: 16,
+              padding: '12px 24px',
+            }}
+          >
+            💬 {nearbyNpcName} と話す (Space)
+          </button>
+        )
       )}
 
       {/* Bottom Right: Stamps & Chat */}

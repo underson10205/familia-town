@@ -5,6 +5,8 @@ import {
   type NpcData,
   type OnlinePlayerState,
   type WorldClock,
+  BUILDINGS,
+  TILE_SIZE,
   WORLD_HEIGHT,
   WORLD_WIDTH,
   clampAndResolvePosition,
@@ -21,6 +23,8 @@ interface TownCanvasProps {
   onSendMove: (x: number, y: number, dir: Direction, moving: boolean) => void;
   onNearbyNpcChange: (npc: NpcData | null) => void;
   onInteractNpc: (npcId: string) => void;
+  onNearDungeonGateChange: (near: boolean) => void;
+  onEnterDungeonGate: () => void;
 }
 
 export function TownCanvas({
@@ -32,6 +36,8 @@ export function TownCanvas({
   onSendMove,
   onNearbyNpcChange,
   onInteractNpc,
+  onNearDungeonGateChange,
+  onEnterDungeonGate,
 }: TownCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const clockRef = useRef(clock);
@@ -42,15 +48,25 @@ export function TownCanvas({
 
   const localPosRef = useRef({ x: self.x, y: self.y, dir: self.dir as Direction, moving: false });
   const nearestNpcRef = useRef<NpcData | null>(null);
+  const nearGateRef = useRef(false);
 
   useEffect(() => {
     const keys = new Set<string>();
+    const dungeonGate = BUILDINGS.find((b) => b.id === 'dungeon_gate');
+    const gateX = dungeonGate ? dungeonGate.doorTileX * TILE_SIZE : 840;
+    const gateY = dungeonGate ? dungeonGate.doorTileY * TILE_SIZE + 16 : 208;
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (document.activeElement?.tagName === 'INPUT') return;
       keys.add(e.key.toLowerCase());
-      if ((e.key === ' ' || e.key === 'Enter') && nearestNpcRef.current) {
-        e.preventDefault();
-        onInteractNpc(nearestNpcRef.current.id);
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (nearGateRef.current) {
+          e.preventDefault();
+          onEnterDungeonGate();
+        } else if (nearestNpcRef.current) {
+          e.preventDefault();
+          onInteractNpc(nearestNpcRef.current.id);
+        }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -63,6 +79,7 @@ export function TownCanvas({
     let lastFrameMs = performance.now();
     let lastNetSendMs = 0;
     let lastReportedNpcId: string | null = null;
+    let lastNearGate = false;
 
     const loop = (nowMs: number) => {
       const dt = Math.min(0.05, (nowMs - lastFrameMs) / 1000);
@@ -117,6 +134,14 @@ export function TownCanvas({
         if ((pos.moving && nowMs - lastNetSendMs > 50) || (!pos.moving && wasMoving)) {
           lastNetSendMs = nowMs;
           onSendMove(Math.round(pos.x), Math.round(pos.y), pos.dir, pos.moving);
+        }
+
+        // Check proximity to North Dungeon Gate
+        const nearGate = Math.hypot(pos.x - gateX, pos.y - gateY) < 92;
+        nearGateRef.current = nearGate;
+        if (nearGate !== lastNearGate) {
+          lastNearGate = nearGate;
+          onNearDungeonGateChange(nearGate);
         }
 
         // Find nearest interactable NPC within 75px
@@ -213,7 +238,7 @@ export function TownCanvas({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [joystickRef, npcsRef, onInteractNpc, onNearbyNpcChange, onSendMove, playersRef]);
+  }, [joystickRef, npcsRef, onEnterDungeonGate, onInteractNpc, onNearDungeonGateChange, onNearbyNpcChange, onSendMove, playersRef]);
 
   return (
     <canvas

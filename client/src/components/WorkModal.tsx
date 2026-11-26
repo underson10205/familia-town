@@ -19,6 +19,7 @@ interface WorkModalProps {
   self: CharacterData;
   workResult: WorkResultPayload | null;
   onCompleteWork: (recipeId: string, score: number) => void;
+  onEnterDungeon: (recipe: WorkRecipeDef) => void;
   onClearResult: () => void;
   onOpenSkills: () => void;
   onClose: () => void;
@@ -28,6 +29,7 @@ export function WorkModal({
   self,
   workResult,
   onCompleteWork,
+  onEnterDungeon,
   onClearResult,
   onOpenSkills,
   onClose,
@@ -253,10 +255,14 @@ export function WorkModal({
                       style={{ padding: '10px 16px', fontSize: 14, flexShrink: 0 }}
                       onClick={() => {
                         soundManager.playPop(600);
-                        setActiveRecipe(r);
+                        if (self.jobId === 'adventurer') {
+                          onEnterDungeon(r);
+                        } else {
+                          setActiveRecipe(r);
+                        }
                       }}
                     >
-                      {locked ? '🔒' : hungry ? '🍙おなか不足' : '▶ はじめる'}
+                      {locked ? '🔒' : hungry ? '🍙おなか不足' : self.jobId === 'adventurer' ? '🌲 入る' : '▶ はじめる'}
                     </button>
                   </div>
                 );

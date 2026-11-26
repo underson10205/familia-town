@@ -1,9 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
-import type { NpcData } from '@familia-town/shared';
+import { type NpcData, type WorkRecipeDef, getRecipesForJob } from '@familia-town/shared';
 import { useGameSocket } from './net/useGameSocket';
 import { LoginScreen } from './components/LoginScreen';
 import { CharacterCreator } from './components/CharacterCreator';
 import { TownCanvas } from './components/TownCanvas';
+import { DungeonCanvas } from './components/DungeonCanvas';
 import { HUD } from './components/HUD';
 import { JobInfoModal } from './components/JobInfoModal';
 import { NpcDialogModal } from './components/NpcDialogModal';
@@ -46,12 +47,30 @@ export function App() {
   const [showWork, setShowWork] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
   const [nearbyNpc, setNearbyNpc] = useState<NpcData | null>(null);
+  const [nearDungeonGate, setNearDungeonGate] = useState(false);
+  const [activeDungeonRecipe, setActiveDungeonRecipe] = useState<WorkRecipeDef | null>(null);
   const joystickRef = useRef({ dx: 0, dy: 0 });
 
   const handleJoystickMove = useCallback((dx: number, dy: number) => {
     joystickRef.current.dx = dx;
     joystickRef.current.dy = dy;
   }, []);
+
+  const handleEnterDungeonGate = useCallback(() => {
+    if (!self) return;
+    if (self.jobId === 'adventurer') {
+      // Open dungeon selector (or enter directly)
+      setWorkResult(null);
+      setShowWork(true);
+    } else {
+      // Even non-adventurers can peek at tier 1 dungeon after switching, or show work modal
+      const advTier1 = getRecipesForJob('adventurer')[0];
+      if (advTier1) {
+        changeJob('adventurer');
+        setActiveDungeonRecipe(advTier1);
+      }
+    }
+  }, [changeJob, self, setWorkResult]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -92,6 +111,17 @@ export function App() {
             onCreateNew={() => setCreating(true)}
           />
         )
+      ) : activeDungeonRecipe ? (
+        <DungeonCanvas
+          self={self}
+          recipe={activeDungeonRecipe}
+          onExit={(score) => {
+            const finishedRecipe = activeDungeonRecipe;
+            setActiveDungeonRecipe(null);
+            completeWork(finishedRecipe.id, score);
+            setShowWork(true);
+          }}
+        />
       ) : (
         clock && (
           <>
@@ -104,12 +134,15 @@ export function App() {
               onSendMove={sendMove}
               onNearbyNpcChange={setNearbyNpc}
               onInteractNpc={interactNpc}
+              onNearDungeonGateChange={setNearDungeonGate}
+              onEnterDungeonGate={handleEnterDungeonGate}
             />
             <HUD
               self={self}
               clock={clock}
               chatHistory={chatHistory}
               nearbyNpcName={nearbyNpc?.name ?? null}
+              nearDungeonGate={nearDungeonGate}
               onSendChat={sendChat}
               onSendStamp={sendStamp}
               onOpenWork={() => {
@@ -120,6 +153,7 @@ export function App() {
               onOpenJobs={() => setShowJobs(true)}
               onEatSnack={() => eatSnack('onigiri')}
               onInteractNearby={() => nearbyNpc && interactNpc(nearbyNpc.id)}
+              onEnterDungeonGate={handleEnterDungeonGate}
               onJoystickMove={handleJoystickMove}
             />
             {showWork && (
@@ -127,6 +161,10 @@ export function App() {
                 self={self}
                 workResult={workResult}
                 onCompleteWork={completeWork}
+                onEnterDungeon={(recipe) => {
+                  setShowWork(false);
+                  setActiveDungeonRecipe(recipe);
+                }}
                 onClearResult={() => setWorkResult(null)}
                 onOpenSkills={() => setShowJobs(true)}
                 onClose={() => {
