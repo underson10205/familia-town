@@ -552,22 +552,6 @@ export function DungeonCanvas({ self, recipe, onExit }: DungeonCanvasProps) {
             ctx.restore();
           }
 
-          // Sword Slash Arc VFX (Zelda-style!)
-          if (player.slashTimer > 0) {
-            ctx.save();
-            ctx.translate(player.x, player.y - 12);
-            ctx.fillStyle = 'rgba(255, 238, 130, 0.45)';
-            ctx.strokeStyle = '#FFF9DB';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.arc(0, 0, slashReach, player.slashAngle - slashArc / 2, player.slashAngle + slashArc / 2);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.restore();
-          }
-
           // Draw Player Chibi Character!
           const blinkHide = player.invuln > 0 && Math.floor(timeSec * 16) % 2 === 0;
           if (!blinkHide) {
@@ -581,6 +565,107 @@ export function DungeonCanvas({ self, recipe, onExit }: DungeonCanvasProps) {
               name: self.name,
               jobId: self.jobId,
             });
+
+            // Animated Swinging Sword (Zelda-style!)
+            if (player.slashTimer > 0) {
+              const duration = 0.2;
+              const progress = Math.max(0, Math.min(1, 1 - player.slashTimer / duration));
+              const startAng = player.slashAngle - slashArc / 2;
+              const curAng = startAng + progress * slashArc;
+              const trailStart = Math.max(startAng, curAng - slashArc * 0.65);
+              const bladeLen = slashReach * 0.92;
+
+              ctx.save();
+              ctx.translate(player.x, player.y - 14);
+
+              // Crescent motion trail behind the swinging blade
+              ctx.strokeStyle = `rgba(255, 245, 170, ${(0.75 * (1 - progress * 0.5)).toFixed(2)})`;
+              ctx.lineWidth = 12;
+              ctx.lineCap = 'round';
+              ctx.beginPath();
+              ctx.arc(0, 0, bladeLen * 0.78, trailStart, curAng);
+              ctx.stroke();
+
+              ctx.strokeStyle = `rgba(255, 255, 255, ${(0.9 * (1 - progress * 0.4)).toFixed(2)})`;
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.arc(0, 0, bladeLen * 0.92, trailStart, curAng);
+              ctx.stroke();
+
+              // Actual Sword Sprite rotating along the swing arc
+              ctx.rotate(curAng);
+              // Leather hilt
+              ctx.fillStyle = '#6E472B';
+              ctx.strokeStyle = '#3B281B';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.roundRect(6, -3, 11, 6, 2);
+              ctx.fill();
+              ctx.stroke();
+
+              // Golden crossguard
+              ctx.fillStyle = '#F2C94C';
+              ctx.beginPath();
+              ctx.roundRect(15, -9, 5, 18, 2);
+              ctx.fill();
+              ctx.stroke();
+
+              // Gleaming steel blade
+              const bladeGrad = ctx.createLinearGradient(20, -5, bladeLen, 5);
+              bladeGrad.addColorStop(0, '#E8F1F8');
+              bladeGrad.addColorStop(0.5, '#FFFFFF');
+              bladeGrad.addColorStop(1, '#B8D4E8');
+              ctx.fillStyle = bladeGrad;
+              ctx.beginPath();
+              ctx.moveTo(20, -5);
+              ctx.lineTo(bladeLen - 8, -4.5);
+              ctx.lineTo(bladeLen + 4, 0);
+              ctx.lineTo(bladeLen - 8, 4.5);
+              ctx.lineTo(20, 5);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+
+              // Blade center shine line
+              ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+              ctx.lineWidth = 1.5;
+              ctx.beginPath();
+              ctx.moveTo(22, 0);
+              ctx.lineTo(bladeLen - 6, 0);
+              ctx.stroke();
+
+              ctx.restore();
+            } else {
+              // Idle / walking sword held at the adventurer's side
+              const sideX = player.dir === 'left' ? -14 : 14;
+              const idleTilt = player.dir === 'left' ? -2.35 : -0.78;
+              ctx.save();
+              ctx.translate(player.x + sideX, player.y - 12);
+              ctx.rotate(idleTilt + (player.moving ? Math.sin(timeSec * 12) * 0.12 : 0));
+              ctx.strokeStyle = '#3B281B';
+              ctx.lineWidth = 1.8;
+              ctx.fillStyle = '#6E472B';
+              ctx.beginPath();
+              ctx.roundRect(-2, -2.5, 8, 5, 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#F2C94C';
+              ctx.beginPath();
+              ctx.roundRect(5, -6, 3.5, 12, 1.5);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#E6F0F7';
+              ctx.beginPath();
+              ctx.moveTo(8.5, -3.5);
+              ctx.lineTo(24, -3);
+              ctx.lineTo(29, 0);
+              ctx.lineTo(24, 3);
+              ctx.lineTo(8.5, 3.5);
+              ctx.closePath();
+              ctx.fill();
+              ctx.stroke();
+              ctx.restore();
+            }
           }
 
           // Floating damage & loot texts
