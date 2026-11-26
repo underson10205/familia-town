@@ -291,6 +291,12 @@ export function useGameSocket() {
     },
     [send]
   );
+  const unlockSkill = useCallback(
+    (skillId: string) => {
+      send({ type: 'unlock_skill', skillId });
+    },
+    [send]
+  );
   const interactNpc = useCallback((npcId: string) => send({ type: 'interact_npc', npcId }), [send]);
   const eatSnack = useCallback(() => {
     soundManager.playPop(700, 0.1);
@@ -314,6 +320,7 @@ export function useGameSocket() {
     sendChat,
     sendStamp,
     changeJob,
+    unlockSkill,
     interactNpc,
     eatSnack,
   };

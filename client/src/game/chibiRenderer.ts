@@ -89,9 +89,12 @@ export function drawChibiCharacter(ctx: CanvasRenderingContext2D, opts: ChibiDra
   ctx.fill();
   ctx.stroke();
 
-  // Ears
+  // Ears (separate beginPath so no line connects across the face!)
   ctx.beginPath();
   ctx.arc(-16, -27, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
   ctx.arc(16, -27, 3.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
@@ -312,6 +315,9 @@ function drawBackHair(ctx: CanvasRenderingContext2D, app: Appearance, dir: Direc
     // Twin tails
     ctx.beginPath();
     ctx.ellipse(-19, -22, 6, 12, 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
     ctx.ellipse(19, -22, 6, 12, -0.25, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
@@ -331,6 +337,9 @@ function drawBackHair(ctx: CanvasRenderingContext2D, app: Appearance, dir: Direc
     // Twin buns
     ctx.beginPath();
     ctx.arc(-15, -41, 6.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
     ctx.arc(15, -41, 6.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
@@ -389,6 +398,9 @@ function drawAccessory(ctx: CanvasRenderingContext2D, app: Appearance): void {
     ctx.fillStyle = '#E85D75';
     ctx.beginPath();
     ctx.ellipse(-6, -44, 6, 4, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
     ctx.ellipse(6, -44, 6, 4, 0.3, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();

@@ -26,6 +26,7 @@ export function App() {
     sendChat,
     sendStamp,
     changeJob,
+    unlockSkill,
     interactNpc,
     eatSnack,
   } = useGameSocket();
@@ -109,8 +110,8 @@ export function App() {
                 self={self}
                 onChangeJob={(jobId) => {
                   changeJob(jobId);
-                  setShowJobs(false);
                 }}
+                onUnlockSkill={unlockSkill}
                 onClose={() => setShowJobs(false)}
               />
             )}

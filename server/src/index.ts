@@ -10,11 +10,13 @@ import {
   type ClientMessage,
   type OnlinePlayerState,
   type ServerMessage,
+  ALL_SKILLS,
   JOBS,
   MAX_PLAYERS,
   STARTING_AGE,
   STARTING_MONEY,
   TOWN_SPAWN,
+  canUnlockSkill,
   clampAndResolvePosition,
   createInitialJobProgress,
 } from '@familia-town/shared';
@@ -126,6 +128,14 @@ function loginCharacter(conn: ClientConn, characterId: string): void {
     return;
   }
 
+  // Backward-compatible migration for characters created before SP system
+  if (typeof charData.skillPoints !== 'number') {
+    charData.skillPoints = 2;
+  }
+  if (!charData.skillRanks) {
+    charData.skillRanks = {};
+  }
+
   const state = toOnlineState(charData);
   const session: ActiveSession = { conn, characterId: charData.id, state, data: charData };
   sessions.set(conn.id, session);
@@ -183,6 +193,8 @@ function handleClientMessage(conn: ClientConn, msg: ClientMessage): void {
         appearance: msg.appearance,
         jobId: msg.jobId,
         jobProgress: createInitialJobProgress(),
+        skillPoints: 2,
+        skillRanks: {},
         unlockedSkills: [],
         money: STARTING_MONEY,
         stamina: 100,
@@ -288,6 +300,25 @@ function handleClientMessage(conn: ClientConn, msg: ClientMessage): void {
 
       conn.send({ type: 'self_updated', self: session.data });
       broadcast({ type: 'player_updated', player: session.state }, conn.id);
+      break;
+    }
+
+    case 'unlock_skill': {
+      const session = sessions.get(conn.id);
+      if (!session) return;
+      const check = canUnlockSkill(msg.skillId, session.data.skillRanks, session.data.skillPoints);
+      if (!check.ok) {
+        conn.send({ type: 'error', message: check.reason ?? 'スキルを習得できません' });
+        return;
+      }
+      const node = ALL_SKILLS[msg.skillId];
+      session.data.skillPoints -= node.cost;
+      session.data.skillRanks[msg.skillId] = (session.data.skillRanks[msg.skillId] ?? 0) + 1;
+      if (!session.data.unlockedSkills.includes(msg.skillId)) {
+        session.data.unlockedSkills.push(msg.skillId);
+      }
+      db.saveCharacter(session.data);
+      conn.send({ type: 'self_updated', self: session.data });
       break;
     }
 

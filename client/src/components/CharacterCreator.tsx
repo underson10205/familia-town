@@ -52,12 +52,44 @@ export function CharacterCreator({ onBack, onSubmit }: CharacterCreatorProps) {
         justifyContent: 'center',
       }}
     >
-      <div className="storybook-card" style={{ width: '100%', maxWidth: 880, padding: 24, height: 'fit-content' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 22 }}>✨ あたらしい住人をつくろう！</h2>
+      <div className="storybook-card" style={{ width: '100%', maxWidth: 880, padding: 20, height: 'fit-content' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 style={{ margin: 0, fontSize: 20 }}>✨ あたらしい住人をつくろう！</h2>
           <button className="btn-secondary" onClick={onBack}>
             ← もどる
           </button>
+        </div>
+
+        {/* Sticky Live Character Preview (always visible while scrolling!) */}
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: 'linear-gradient(180deg, #e5f5d8 0%, #f9f3df 100%)',
+            border: '2.5px solid #c9a675',
+            borderRadius: 16,
+            padding: '10px 16px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 18,
+            boxShadow: '0 6px 16px rgba(74, 53, 37, 0.14)',
+          }}
+        >
+          <ChibiPreview appearance={appearance} size={118} scale={1.75} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>
+              {name.trim() || 'なまえ未入力'}（{gender === 'female' ? '👧 女の子' : '👦 男の子'}）
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: selectedJob.color }}>
+              {selectedJob.emoji} {selectedJob.name}
+            </div>
+            <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: 13 }} onClick={handleRandomize}>
+              🎲 おまかせチェンジ
+            </button>
+          </div>
         </div>
 
         <div
@@ -67,25 +99,8 @@ export function CharacterCreator({ onBack, onSubmit }: CharacterCreatorProps) {
             gap: 20,
           }}
         >
-          {/* Left: Preview & Basic Info */}
+          {/* Left: Basic Info & Appearance Parts */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div
-              style={{
-                background: 'linear-gradient(180deg, #e5f5d8 0%, #f9f3df 100%)',
-                border: '2px solid #d5ba8f',
-                borderRadius: 18,
-                padding: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <ChibiPreview appearance={appearance} size={150} scale={2.2} />
-              <button className="btn-secondary" onClick={handleRandomize}>
-                🎲 おまかせチェンジ
-              </button>
-            </div>
 
             <div>
               <label style={{ fontWeight: 800, display: 'block', marginBottom: 6 }}>おなまえ（12文字まで）</label>

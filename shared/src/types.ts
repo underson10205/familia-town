@@ -46,6 +46,8 @@ export interface CharacterData {
   appearance: Appearance;
   jobId: JobId;
   jobProgress: Record<JobId, JobProgress>;
+  skillPoints: number;
+  skillRanks: Record<string, number>;
   unlockedSkills: string[];
   money: number;
   stamina: number;
@@ -163,6 +165,7 @@ export type ClientMessage =
   | { type: 'chat'; text: string }
   | { type: 'stamp'; stamp: StampId }
   | { type: 'change_job'; jobId: JobId }
+  | { type: 'unlock_skill'; skillId: string }
   | { type: 'interact_npc'; npcId: string }
   | { type: 'eat_snack' };
 
